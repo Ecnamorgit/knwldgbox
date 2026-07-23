@@ -214,7 +214,8 @@ const messages = {
         found: 'found',
         readyTitle: 'Sherlock (Username Search)',
         readyText: 'Enter a username to search across multiple platforms.',
-        poweredBy: 'Powered by sherlock-project'
+        poweredBy: 'Powered by sherlock-project',
+        filterPlaceholder: 'Filter platforms (e.g. tiktok, insta)...'
       },
       holehe: {
         placeholder: 'Enter a target email (e.g., target at gmail.com)',
@@ -817,7 +818,8 @@ const messages = {
         found: 'trouvé',
         readyTitle: 'Recherche Sherlock',
         readyText: 'Entrez un nom d\'utilisateur ci-dessus pour rechercher sur les réseaux sociaux.',
-        poweredBy: 'Propulsé par sherlock-project'
+        poweredBy: 'Propulsé par sherlock-project',
+        filterPlaceholder: 'Filtrer les plateformes (ex : tiktok, insta)...'
       },
       holehe: {
         placeholder: 'Entrez un e-mail cible (ex. target at gmail.com)',
