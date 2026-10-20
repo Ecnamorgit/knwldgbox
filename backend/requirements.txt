@@ -25,3 +25,4 @@ geotext
 geopy
 ddgs
 truststore
+pip-system-certs
