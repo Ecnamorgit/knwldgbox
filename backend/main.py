@@ -42,6 +42,7 @@ except Exception:
 
 from telegram_service import telegram_service
 from sherlock_service import sherlock_service
+from recon_service import recon_service
 import dataleak_service
 import graph_service
 import whois_service
@@ -574,6 +575,10 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.websocket("/ws/sherlock")
 async def sherlock_endpoint(websocket: WebSocket):
     await sherlock_service.handle_websocket(websocket)
+
+@app.websocket("/ws/recon")
+async def recon_endpoint(websocket: WebSocket):
+    await recon_service.handle_websocket(websocket)
 
 
 # Must be the LAST mount so /api/* and /ws/* routes take priority.
