@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Send, Bot, User, Trash2 } from 'lucide-vue-next'
+import { Send, Bot, User, Trash2, Globe } from 'lucide-vue-next'
 import { marked } from 'marked'
 
 const { t } = useI18n()
@@ -10,6 +10,7 @@ const messages = ref([])
 const userInput = ref('')
 const isGenerating = ref(false)
 const chatContainer = ref(null)
+const webSearch = ref(true)
 
 const selectedModel = ref('qwen2.5:7b')
 const availableModels = ref([
@@ -117,9 +118,10 @@ async function sendMessage() {
     const res = await fetch(`http://${window.location.hostname}:${import.meta.env.VITE_API_PORT || 8000}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         messages: apiMessages,
-        model: selectedModel.value
+        model: selectedModel.value,
+        web_search: webSearch.value
       })
     })
     
@@ -156,6 +158,14 @@ async function sendMessage() {
         <p class="page-subtitle">{{ $t('aiChatbot.subtitle') }}</p>
       </div>
       <div class="header-actions">
+        <button
+          class="icon-btn glass-panel"
+          :class="{ 'search-on': webSearch }"
+          @click="webSearch = !webSearch"
+          :title="webSearch ? 'Recherche web : activée' : 'Recherche web : désactivée'"
+        >
+          <Globe size="18" />
+        </button>
         <select v-model="selectedModel" class="model-select glass-panel">
           <option v-for="model in availableModels" :key="model.value" :value="model.value">
             {{ model.name }}
@@ -272,6 +282,12 @@ async function sendMessage() {
 
 .text-red { color: var(--accent-red); }
 .text-orange { color: var(--accent-orange); }
+
+.icon-btn.search-on {
+  color: var(--accent-orange);
+  border-color: var(--accent-orange);
+  background: rgba(var(--accent-rgb), 0.12);
+}
 
 .chat-layout {
   flex: 1;

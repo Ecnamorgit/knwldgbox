@@ -12,6 +12,8 @@ import json
 import base64
 import httpx
 import time
+import re
+from datetime import date
 
 try:
     from geotext import GeoText
@@ -361,6 +363,80 @@ async def list_ollama_models():
         return {"status": "error", "models": [], "detail": str(e)}
 
 
+# ---------------------------------------------------------------------------
+# Web search (DuckDuckGo, free/keyless) so the offline AI can answer about
+# current events: the model plans a query, we search, and feed real results
+# (with sources) back for a grounded answer.
+# ---------------------------------------------------------------------------
+
+def web_search(query: str, max_results: int = 5) -> list:
+    try:
+        from ddgs import DDGS
+        with DDGS() as ddgs:
+            return list(ddgs.text(query, max_results=max_results))
+    except Exception as e:
+        print(f"[websearch] error: {e}")
+        return []
+
+
+_GREETINGS = ("bonjour", "salut", "coucou", "merci", "hello", "hi", "hey",
+              "ok", "ça va", "ca va", "yo", "bonsoir", "thanks", "thx")
+
+
+def _looks_trivial(text: str) -> bool:
+    """Small talk / greetings that don't warrant a web search."""
+    t = text.strip().lower().rstrip("!?. ")
+    if len(t.split()) <= 2:
+        return True
+    return any(t == g or t.startswith(g + " ") for g in _GREETINGS)
+
+
+async def plan_search_query(messages: list, model: str | None) -> str | None:
+    """Turn the user's last message into a focused web-search query.
+
+    Search-first: any real question triggers a search; only trivial small talk
+    is skipped. (Letting a small local model decide yes/no is unreliable.)
+    """
+    last_user = next((m.get("content", "") for m in reversed(messages)
+                      if m.get("role") == "user"), "")
+    if not last_user.strip() or _looks_trivial(last_user):
+        return None
+    today = date.today().isoformat()
+    router = [
+        {"role": "system", "content": (
+            f"Today is {today}. Rewrite the user's message as one concise web "
+            "search query to find current, factual information. Add the year "
+            "when the topic is recent. Output ONLY the query: no quotes, no "
+            "explanation, no label.")},
+        {"role": "user", "content": last_user[:1000]},
+    ]
+    try:
+        out = (await llm_chat(router, model=model, timeout=60.0)).strip()
+    except Exception:
+        return last_user[:200]  # fall back to searching the raw question
+    first_line = out.strip().strip('"').splitlines()[0].strip() if out else ""
+    # Guard against the model echoing a refusal/label instead of a query.
+    if not first_line or first_line.upper().startswith("NONE") or len(first_line) > 200:
+        return last_user[:200]
+    return first_line
+
+
+def format_search_context(query: str, results: list) -> str:
+    today = date.today().isoformat()
+    lines = [f'Today is {today}. Web search results for "{query}":', ""]
+    for i, r in enumerate(results, 1):
+        title = r.get("title", "")
+        href = r.get("href", "") or r.get("url", "")
+        body = (r.get("body", "") or "")[:400]
+        lines.append(f"{i}. {title}\n{href}\n{body}")
+    lines += [
+        "",
+        "Answer the user's last question using ONLY these results. Cite the "
+        "sources you use as markdown links [title](url). If the results do not "
+        "contain the answer, say so clearly and do not invent anything."]
+    return "\n".join(lines)
+
+
 class RssSummarizeRequest(BaseModel):
     entries: list
     api_key: str | None = None
@@ -403,6 +479,7 @@ class ChatRequest(BaseModel):
     messages: list
     api_key: str | None = None
     model: str | None = None
+    web_search: bool = False
 
 @app.post("/api/chat")
 async def chat_completion(req: ChatRequest):
@@ -415,10 +492,22 @@ async def chat_completion(req: ChatRequest):
         except:
             pass
 
+    sources = []
+    if req.web_search:
+        query = await plan_search_query(req.messages, req.model)
+        if query:
+            sources = web_search(query, max_results=5)
+            if sources:
+                req.messages.append({"role": "system",
+                                     "content": format_search_context(query, sources)})
+
     try:
         content = await llm_chat(req.messages, model=req.model,
                                  api_key=req.api_key, timeout=120.0)
-        return {"status": "success", "message": {"role": "assistant", "content": content}}
+        return {"status": "success",
+                "message": {"role": "assistant", "content": content},
+                "sources": [{"title": s.get("title"), "url": s.get("href") or s.get("url")}
+                            for s in sources]}
     except HTTPException:
         raise
     except httpx.ReadTimeout:
