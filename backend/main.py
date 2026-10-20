@@ -1,3 +1,11 @@
+# Use the OS certificate store so HTTPS works behind antivirus/VPN TLS
+# inspection (e.g. Avast Web Shield), which GHunt's Google API calls hit.
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except Exception:
+    pass
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -42,6 +50,7 @@ import tiktok_service
 import ghunt_service
 import holehe_service
 import maigret_service
+import bluesky_service
 import downloader_service
 import archive_service
 import target_service
@@ -80,6 +89,7 @@ app.include_router(tiktok_service.router)
 app.include_router(ghunt_service.router)
 app.include_router(holehe_service.router)
 app.include_router(maigret_service.router)
+app.include_router(bluesky_service.router)
 app.include_router(downloader_service.router)
 app.include_router(archive_service.router)
 app.include_router(target_service.router)

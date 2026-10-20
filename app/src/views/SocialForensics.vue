@@ -1,12 +1,13 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { User, Hash, Globe, FileJson, Mail, DownloadCloud, Activity } from 'lucide-vue-next'
+import { User, Hash, Globe, FileJson, Mail, DownloadCloud, Activity, AtSign } from 'lucide-vue-next'
 import SherlockModule from '../components/social/SherlockModule.vue'
 import TiktokModule from '../components/social/TiktokModule.vue'
 import GHuntModule from '../components/social/GHuntModule.vue'
 import MaigretModule from '../components/social/MaigretModule.vue'
 import HoleheModule from '../components/social/HoleheModule.vue'
+import BlueskyModule from '../components/social/BlueskyModule.vue'
 import html2pdf from 'html2pdf.js'
 
 import { useRoute } from 'vue-router'
@@ -109,6 +110,13 @@ async function exportToPdf() {
       >
         <Hash size="18" /> {{ t('socialForensics.tiktokTab') }}
       </button>
+      <button
+        class="tab-btn"
+        :class="{ active: activeTab === 'bluesky' }"
+        @click="activeTab = 'bluesky'"
+      >
+        <AtSign size="18" /> Bluesky
+      </button>
     </div>
 
     <div v-show="activeTab === 'sherlock'" class="tab-content">
@@ -129,6 +137,10 @@ async function exportToPdf() {
 
     <div v-show="activeTab === 'tiktok'" class="tab-content">
       <TiktokModule />
+    </div>
+
+    <div v-show="activeTab === 'bluesky'" class="tab-content">
+      <BlueskyModule />
     </div>
   </div>
 </template>
