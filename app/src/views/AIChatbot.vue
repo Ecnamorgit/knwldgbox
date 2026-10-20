@@ -11,44 +11,59 @@ const userInput = ref('')
 const isGenerating = ref(false)
 const chatContainer = ref(null)
 
-const selectedModel = ref('openrouter/free')
+const selectedModel = ref('qwen2.5:7b')
 const availableModels = ref([
-  { name: 'OpenRouter Free (Auto-Select)', value: 'openrouter/free' }
+  { name: 'qwen2.5:7b', value: 'qwen2.5:7b' }
 ])
 
 onMounted(async () => {
-  // Try to get configured model from settings
-  const savedSettings = localStorage.getItem('knwldg_api_settings')
-  if (savedSettings) {
-    try {
-      const parsed = JSON.parse(savedSettings)
-      if (parsed.openrouter_model) {
-        selectedModel.value = parsed.openrouter_model
-      }
-    } catch(e) {}
-  }
-  
-  // Load models from OpenRouter
+  // Read AI provider from settings (default: local Ollama)
+  let parsed = {}
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/models')
-    const json = await res.json()
-    if (json && json.data) {
-      const freeModels = json.data.filter(m => m.pricing && m.pricing.prompt === "0" && m.pricing.completion === "0")
-      const dynamicModels = freeModels.map(m => ({
-        name: m.name,
-        value: m.id
-      }))
-      
-      const existingValues = new Set(dynamicModels.map(m => m.value))
-      availableModels.value = [
-        ...dynamicModels.sort((a, b) => a.name.localeCompare(b.name)),
-        ...availableModels.value.filter(m => !existingValues.has(m.value))
-      ]
+    parsed = JSON.parse(localStorage.getItem('knwldg_api_settings') || '{}')
+  } catch(e) {}
+  const provider = parsed.ai_provider || 'local'
+
+  if (provider === 'local' || provider === 'ollama') {
+    // Local Ollama: list installed models via the backend
+    selectedModel.value = parsed.ollama_model || 'qwen2.5:7b'
+    try {
+      const host = window.location.hostname
+      const port = import.meta.env.VITE_API_PORT || 8000
+      const res = await fetch(`http://${host}:${port}/api/ollama/models`)
+      const json = await res.json()
+      if (json && json.status === 'success' && json.models.length) {
+        availableModels.value = json.models.map(m => ({ name: m, value: m }))
+        if (!json.models.includes(selectedModel.value)) {
+          selectedModel.value = json.models[0]
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load Ollama models", e)
     }
-  } catch (e) {
-    console.error("Failed to load models", e)
+  } else {
+    // OpenRouter: load the free model list
+    if (parsed.openrouter_model) selectedModel.value = parsed.openrouter_model
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/models')
+      const json = await res.json()
+      if (json && json.data) {
+        const freeModels = json.data.filter(m => m.pricing && m.pricing.prompt === "0" && m.pricing.completion === "0")
+        const dynamicModels = freeModels.map(m => ({
+          name: m.name,
+          value: m.id
+        }))
+        const existingValues = new Set(dynamicModels.map(m => m.value))
+        availableModels.value = [
+          ...dynamicModels.sort((a, b) => a.name.localeCompare(b.name)),
+          ...availableModels.value.filter(m => !existingValues.has(m.value))
+        ]
+      }
+    } catch (e) {
+      console.error("Failed to load models", e)
+    }
   }
-  
+
   // Load chat history
   const history = localStorage.getItem('knwldg_chat_history')
   if (history) {

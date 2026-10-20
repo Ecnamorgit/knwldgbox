@@ -12,10 +12,29 @@ const settings = ref({
   telegram_api_hash: '',
   telegram_phone: '',
   urlscan_api_key: '',
+  ai_provider: 'local',
+  ollama_url: 'http://localhost:11434',
+  ollama_model: 'qwen2.5:7b',
   openrouter_api_key: '',
   openrouter_model: 'google/gemini-2.0-flash-exp:free',
   openrouter_system_prompt: 'You are a professional, objective intelligence analyst. Provide concise, accurate, and professional answers.'
 })
+
+const ollamaModels = ref([])
+
+async function loadOllamaModels() {
+  try {
+    const host = window.location.hostname
+    const port = import.meta.env.VITE_API_PORT || 8000
+    const res = await fetch(`http://${host}:${port}/api/ollama/models`)
+    const json = await res.json()
+    if (json && json.status === 'success') {
+      ollamaModels.value = json.models
+    }
+  } catch (error) {
+    console.error("Failed to load Ollama models", error)
+  }
+}
 
 const openRouterModels = ref([
   { name: 'Gemini 2.0 Flash (Free)', value: 'google/gemini-2.0-flash-exp:free' },
@@ -114,6 +133,7 @@ onMounted(() => {
   }
   
   loadOpenRouterModels()
+  loadOllamaModels()
 })
 
 function applyCustomization() {
@@ -292,24 +312,60 @@ async function verifyCode() {
         </div>
 
         <div class="form-group">
-          <label>{{ t('settings.openRouterKey') }}</label>
+          <label>AI Provider</label>
           <div class="input-wrapper">
             <Sparkles size="16" class="input-icon" />
-            <input type="password" v-model="settings.openrouter_api_key" placeholder="sk-or-v1-..." />
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>{{ t('settings.aiModel') }}</label>
-          <div class="input-wrapper">
-            <Activity size="16" class="input-icon" />
-            <select v-model="settings.openrouter_model" class="select-input">
-              <option v-for="model in openRouterModels" :key="model.value" :value="model.value">
-                {{ model.name }}
-              </option>
+            <select v-model="settings.ai_provider" class="select-input">
+              <option value="local">Local (Ollama) — free, offline</option>
+              <option value="openrouter">OpenRouter (API key)</option>
             </select>
           </div>
         </div>
+
+        <!-- Local Ollama provider -->
+        <template v-if="settings.ai_provider === 'local'">
+          <div class="form-group">
+            <label>Local Model (Ollama)</label>
+            <div class="input-wrapper">
+              <Activity size="16" class="input-icon" />
+              <select v-model="settings.ollama_model" class="select-input">
+                <option v-for="m in ollamaModels" :key="m" :value="m">{{ m }}</option>
+                <option v-if="settings.ollama_model && !ollamaModels.includes(settings.ollama_model)" :value="settings.ollama_model">{{ settings.ollama_model }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Ollama URL</label>
+            <div class="input-wrapper">
+              <Key size="16" class="input-icon" />
+              <input type="text" v-model="settings.ollama_url" placeholder="http://localhost:11434" />
+            </div>
+          </div>
+        </template>
+
+        <!-- OpenRouter provider -->
+        <template v-else>
+          <div class="form-group">
+            <label>{{ t('settings.openRouterKey') }}</label>
+            <div class="input-wrapper">
+              <Sparkles size="16" class="input-icon" />
+              <input type="password" v-model="settings.openrouter_api_key" placeholder="sk-or-v1-..." />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>{{ t('settings.aiModel') }}</label>
+            <div class="input-wrapper">
+              <Activity size="16" class="input-icon" />
+              <select v-model="settings.openrouter_model" class="select-input">
+                <option v-for="model in openRouterModels" :key="model.value" :value="model.value">
+                  {{ model.name }}
+                </option>
+              </select>
+            </div>
+          </div>
+        </template>
 
         <div class="form-group" style="margin-top: 12px;">
           <label>AI System Prompt</label>
