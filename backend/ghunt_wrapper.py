@@ -2,6 +2,14 @@ import sys
 import asyncio
 import json
 
+# Trust the OS certificate store so HTTPS works behind antivirus/VPN TLS
+# inspection (e.g. Avast Web Shield) that intercepts the Google API calls.
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except Exception:
+    pass
+
 from ghunt.helpers.utils import get_httpx_client
 from ghunt.apis.peoplepa import PeoplePaHttp
 from ghunt.helpers import auth, playgames, gmaps, calendar as gcalendar

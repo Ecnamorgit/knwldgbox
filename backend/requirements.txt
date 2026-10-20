@@ -24,3 +24,4 @@ setuptools<81.0
 geotext
 geopy
 ddgs
+truststore
