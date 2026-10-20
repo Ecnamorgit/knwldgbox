@@ -18,20 +18,30 @@ function getFavicon(url) {
   try { return `https://www.google.com/s2/favicons?domain=${new URL(url).hostname}&sz=32` } catch { return '' }
 }
 
-const platformCount = computed(() => new Set(results.value.map(r => r.site.toLowerCase())).size)
+const CONF = { high: 3, medium: 2, low: 1 }
+const minConf = ref('low')   // 'low' = show all, 'medium' = hide low, 'high' = high only
 
-// Group accounts by platform for the aggregated footprint
+// Group accounts by platform, filtered by confidence, best-confidence first
 const grouped = computed(() => {
+  const min = CONF[minConf.value]
   const map = {}
   for (const r of results.value) {
-    const key = r.site
-    if (!map[key]) map[key] = { site: r.site, url: r.url, accounts: [] }
-    if (!map[key].accounts.some(a => a.url === r.url)) {
-      map[key].accounts.push({ url: r.url, variant: r.variant, source: r.source })
+    if ((CONF[r.confidence] || 1) < min) continue
+    if (!map[r.site]) map[r.site] = { site: r.site, accounts: [] }
+    if (!map[r.site].accounts.some(a => a.url === r.url)) {
+      map[r.site].accounts.push({ url: r.url, variant: r.variant, source: r.source, confidence: r.confidence || 'low' })
     }
   }
-  return Object.values(map).sort((a, b) => a.site.localeCompare(b.site))
+  const arr = Object.values(map)
+  for (const g of arr) {
+    g.maxConf = Math.max(...g.accounts.map(a => CONF[a.confidence] || 1))
+    g.accounts.sort((a, b) => (CONF[b.confidence] || 1) - (CONF[a.confidence] || 1))
+  }
+  return arr.sort((a, b) => b.maxConf - a.maxConf || a.site.localeCompare(b.site))
 })
+
+const platformCount = computed(() => grouped.value.length)
+const accountCount = computed(() => grouped.value.reduce((n, g) => n + g.accounts.length, 0))
 
 function start() {
   const q = name.value.trim()
@@ -51,7 +61,7 @@ function start() {
     } else if (d.type === 'found') {
       // dedupe by url+variant
       if (!results.value.some(r => r.url === d.url && r.variant === d.variant)) {
-        results.value.push({ site: d.site, url: d.url, variant: d.variant, source: d.source, extra: d.extra })
+        results.value.push({ site: d.site, url: d.url, variant: d.variant, source: d.source, extra: d.extra, confidence: d.confidence || 'low' })
       }
     } else if (d.type === 'progress') {
       progress.value = { done: d.done, total: d.total, current: d.variant }
@@ -98,7 +108,7 @@ onUnmounted(stop)
     <!-- Variants -->
     <div class="variants-box" v-if="variants.length">
       <span class="vlabel">{{ variants.length }} variants tested:</span>
-      <span class="vchip" :class="{ active: progress.current === v }" v-for="v in variants" :key="v">{{ v }}</span>
+      <span class="vchip" :class="[`conf-${v.confidence}`, { active: progress.current === v.name }]" v-for="v in variants" :key="v.name">{{ v.name }}</span>
     </div>
 
     <!-- Progress -->
@@ -110,13 +120,22 @@ onUnmounted(stop)
           <span v-else>Scan complete.</span>
         </div>
         <div class="tally" v-if="results.length">
-          <span class="num">{{ results.length }}</span> accounts ·
+          <span class="num">{{ accountCount }}</span> accounts ·
           <span class="num">{{ platformCount }}</span> platforms
         </div>
       </div>
       <div class="track" v-if="isScanning">
         <div class="fill" :style="{ width: progress.total ? (progress.done / progress.total * 100) + '%' : '0%' }"></div>
       </div>
+    </div>
+
+    <!-- Confidence filter -->
+    <div class="conf-filter" v-if="results.length">
+      <span class="cf-label">Confidence</span>
+      <button class="cf-btn" :class="{ active: minConf === 'low' }" @click="minConf = 'low'">All</button>
+      <button class="cf-btn" :class="{ active: minConf === 'medium' }" @click="minConf = 'medium'">Medium +</button>
+      <button class="cf-btn high" :class="{ active: minConf === 'high' }" @click="minConf = 'high'">High only</button>
+      <span class="cf-hint">High = unique handle · Low = common/initials (homonym-prone)</span>
     </div>
 
     <!-- Aggregated footprint -->
@@ -129,6 +148,7 @@ onUnmounted(stop)
             <span class="pf-count" v-if="g.accounts.length > 1">{{ g.accounts.length }}</span>
           </div>
           <a v-for="acc in g.accounts" :key="acc.url" :href="acc.url" target="_blank" rel="noopener" class="pf-acc">
+            <span class="conf-dot" :class="acc.confidence" :title="`${acc.confidence} confidence`"></span>
             <span class="pf-variant">{{ acc.variant }}</span>
             <span class="pf-url">{{ getDomain(acc.url) }}</span>
             <span class="pf-src" :class="acc.source">{{ acc.source }}</span>
@@ -165,6 +185,22 @@ onUnmounted(stop)
 .vlabel { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-right: 4px; }
 .vchip { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; background: var(--overlay-8); border: 1px solid var(--border-color); color: var(--text-muted); padding: 2px 8px; transition: all 0.2s; }
 .vchip.active { color: var(--accent-orange); border-color: var(--accent-orange); }
+.vchip.conf-high { border-left: 3px solid var(--accent-green); }
+.vchip.conf-medium { border-left: 3px solid var(--accent-orange); }
+.vchip.conf-low { border-left: 3px solid var(--text-muted); opacity: 0.75; }
+
+.conf-filter { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.cf-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+.cf-btn { background: var(--bg-panel); border: 1px solid var(--border-color); color: var(--text-muted); padding: 5px 12px; font-size: 0.8rem; cursor: pointer; transition: var(--transition); }
+.cf-btn:hover { color: var(--text-main); }
+.cf-btn.active { background: rgba(var(--accent-rgb),0.12); color: var(--accent-orange); border-color: var(--accent-orange); }
+.cf-btn.high.active { background: rgba(0,255,136,0.1); color: var(--accent-green); border-color: var(--accent-green); }
+.cf-hint { font-size: 0.72rem; color: var(--text-muted); margin-left: auto; }
+
+.conf-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.conf-dot.high { background: var(--accent-green); }
+.conf-dot.medium { background: var(--accent-orange); }
+.conf-dot.low { background: var(--text-muted); }
 
 .progress-area { margin-bottom: 20px; }
 .progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }

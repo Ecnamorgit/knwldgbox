@@ -20,28 +20,41 @@ def _strip_accents(s: str) -> str:
                    if unicodedata.category(c) != "Mn")
 
 
-def generate_variants(name: str) -> list:
-    """Turn a name (or handle) into likely username variants."""
+def generate_variants(name: str) -> dict:
+    """Turn a name (or handle) into likely username variants, each tagged with
+    a confidence tier (high = unique full handle, medium = name + separator,
+    low = initial-based handles that collide with many homonyms)."""
     name = _strip_accents((name or "").strip().lower())
     tokens = [re.sub(r"[^a-z0-9]", "", t) for t in re.split(r"[\s._\-]+", name)]
     tokens = [t for t in tokens if t]
-    variants = set()
+    vmap = {}
+
+    def add(v, conf):
+        if 2 <= len(v) <= 30 and v not in vmap:
+            vmap[v] = conf
+
     if not tokens:
-        return []
+        return {}
     if len(tokens) == 1:
-        variants.add(tokens[0])
+        add(tokens[0], "medium")
     else:
         first, last = tokens[0], tokens[-1]
-        variants.update([
-            first + last, last + first,
-            f"{first}.{last}", f"{last}.{first}",
-            f"{first}_{last}", f"{last}_{first}",
-            f"{first}-{last}",
-            first[0] + last, first + last[0],
-            f"{first[0]}.{last}", f"{first}.{last[0]}",
-            "".join(tokens),
-        ])
-    return sorted(v for v in variants if 2 <= len(v) <= 30)
+        # High: full tokens concatenated — the distinctive, low-collision form
+        add(first + last, "high")
+        add(last + first, "high")
+        add("".join(tokens), "high")
+        # Medium: full tokens joined by a separator
+        add(f"{first}.{last}", "medium")
+        add(f"{last}.{first}", "medium")
+        add(f"{first}_{last}", "medium")
+        add(f"{last}_{first}", "medium")
+        add(f"{first}-{last}", "medium")
+        # Low: initial-based — common, many false positives
+        add(first[0] + last, "low")
+        add(first + last[0], "low")
+        add(f"{first[0]}.{last}", "low")
+        add(f"{first}.{last[0]}", "low")
+    return vmap
 
 
 async def _bsky_profile(client, actor: str):
@@ -75,8 +88,10 @@ class ReconService:
                 await send({"type": "error", "text": "Empty query"})
                 return
 
-            variants = generate_variants(name)
-            await send({"type": "variants", "variants": variants})
+            vmap = generate_variants(name)
+            variants = list(vmap.keys())
+            await send({"type": "variants",
+                        "variants": [{"name": v, "confidence": c} for v, c in vmap.items()]})
             total = len(variants)
             progress = {"n": 0}
             sem = asyncio.Semaphore(MAX_CONCURRENCY)
@@ -106,6 +121,7 @@ class ReconService:
                                             "site": parts[0].strip(),
                                             "url": "http" + parts[1].strip(),
                                             "source": "sherlock",
+                                            "confidence": vmap[v],
                                         })
                             await p.wait()
                         except Exception as e:
@@ -121,6 +137,7 @@ class ReconService:
                                     "url": f"https://bsky.app/profile/{prof.get('handle')}",
                                     "source": "bluesky",
                                     "extra": prof.get("displayName"),
+                                    "confidence": vmap[v],
                                 })
                         except Exception:
                             pass
