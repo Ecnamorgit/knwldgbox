@@ -434,8 +434,10 @@ def format_search_context(query: str, results: list) -> str:
         "Answer the user's last question following these rules strictly:",
         "- Use ONLY the information in the results above. Do NOT add anything "
         "from your own prior knowledge or assumptions.",
-        "- After every factual statement, cite its source as a markdown link, "
-        "e.g. [1](url).",
+        "- After every factual statement, cite its source by number only, "
+        "e.g. [1] or [2]. NEVER write a URL yourself — the clickable source "
+        "links are shown to the user separately, and any URL you type would be "
+        "wrong.",
         "- Report dates, figures and place names EXACTLY as they appear in the "
         "sources. Do not round or approximate them.",
         "- If a detail (cause, date, number, location) is NOT stated in the "
@@ -450,7 +452,8 @@ def format_search_context(query: str, results: list) -> str:
         "clearly describe the same event, answer about that event and give "
         "the correct date/detail from the sources.",
         "- Answer in the same language as the user.",
-        "- Finish with a short 'Sources' list of the links you actually used."]
+        "- Do NOT append a 'Sources' list or any URLs — they are displayed to "
+        "the user automatically below your answer."]
     return "\n".join(lines)
 
 

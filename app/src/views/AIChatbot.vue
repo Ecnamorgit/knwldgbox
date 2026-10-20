@@ -129,7 +129,8 @@ async function sendMessage() {
     if (res.ok && data.status === 'success') {
       messages.value.push({
         role: 'assistant',
-        content: data.message.content
+        content: data.message.content,
+        sources: Array.isArray(data.sources) ? data.sources.filter(s => s && s.url) : []
       })
     } else {
       messages.value.push({
@@ -192,6 +193,20 @@ async function sendMessage() {
           <div class="message-bubble">
             <div class="message-content markdown-body" v-if="msg.role === 'assistant'" v-html="marked(msg.content)"></div>
             <div class="message-content" v-else>{{ msg.content }}</div>
+            <div class="sources-block" v-if="msg.sources && msg.sources.length">
+              <div class="sources-title">🔗 {{ msg.sources.length }} source{{ msg.sources.length > 1 ? 's' : '' }}</div>
+              <a
+                v-for="(s, i) in msg.sources"
+                :key="i"
+                :href="s.url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="source-link"
+              >
+                <span class="source-num">[{{ i + 1 }}]</span>
+                <span class="source-text">{{ s.title || s.url }}</span>
+              </a>
+            </div>
           </div>
         </div>
         
@@ -287,6 +302,51 @@ async function sendMessage() {
   color: var(--accent-orange);
   border-color: var(--accent-orange);
   background: rgba(var(--accent-rgb), 0.12);
+}
+
+.sources-block {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sources-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.source-link {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 2px 0;
+  transition: color 0.15s;
+}
+
+.source-link:hover {
+  color: var(--accent-orange);
+}
+
+.source-num {
+  color: var(--accent-orange);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.source-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-layout {
