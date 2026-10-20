@@ -428,12 +428,29 @@ def format_search_context(query: str, results: list) -> str:
         title = r.get("title", "")
         href = r.get("href", "") or r.get("url", "")
         body = (r.get("body", "") or "")[:400]
-        lines.append(f"{i}. {title}\n{href}\n{body}")
+        lines.append(f"[{i}] {title}\n{href}\n{body}")
     lines += [
         "",
-        "Answer the user's last question using ONLY these results. Cite the "
-        "sources you use as markdown links [title](url). If the results do not "
-        "contain the answer, say so clearly and do not invent anything."]
+        "Answer the user's last question following these rules strictly:",
+        "- Use ONLY the information in the results above. Do NOT add anything "
+        "from your own prior knowledge or assumptions.",
+        "- After every factual statement, cite its source as a markdown link, "
+        "e.g. [1](url).",
+        "- Report dates, figures and place names EXACTLY as they appear in the "
+        "sources. Do not round or approximate them.",
+        "- If a detail (cause, date, number, location) is NOT stated in the "
+        "results, say it is not specified in the sources. Never guess, infer "
+        "or invent it — this is the most important rule.",
+        "- If the results do not answer the question, say so plainly instead "
+        "of answering from memory.",
+        "- Still answer as fully as the sources allow: report EVERY relevant "
+        "fact they contain (places, figures, events). Being careful means not "
+        "inventing — it does not mean withholding facts that ARE present.",
+        "- If the user's date or a detail is slightly off but the sources "
+        "clearly describe the same event, answer about that event and give "
+        "the correct date/detail from the sources.",
+        "- Answer in the same language as the user.",
+        "- Finish with a short 'Sources' list of the links you actually used."]
     return "\n".join(lines)
 
 
