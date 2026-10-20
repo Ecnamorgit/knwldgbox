@@ -53,6 +53,10 @@ export const apiService = {
     return new WebSocket(`${WS_BASE}/holehe`)
   },
 
+  createReconWebSocket() {
+    return new WebSocket(`${WS_BASE}/recon`)
+  },
+
   createDownloaderWebSocket() {
     return new WebSocket(`${WS_BASE}/downloader`)
   },

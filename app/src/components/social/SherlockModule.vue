@@ -1,8 +1,8 @@
 <script setup>
-import { ref, watch, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
-import { Search, Loader2, ExternalLink, User, Settings, Clock } from 'lucide-vue-next'
+import { Search, Loader2, ExternalLink, User, Settings, Clock, Filter } from 'lucide-vue-next'
 import { apiService } from '../../services/api'
 import SendToGraphButton from '../SendToGraphButton.vue'
 
@@ -14,6 +14,13 @@ const isSearching = ref(false)
 const progressText = ref('')
 const results = ref([])
 const ws = ref(null)
+
+const filterText = ref('')
+const filteredResults = computed(() => {
+  if (!filterText.value) return results.value
+  const q = filterText.value.toLowerCase()
+  return results.value.filter(r => r.site.toLowerCase().includes(q))
+})
 
 const showSettings = ref(false)
 const timeout = ref(60)
@@ -147,9 +154,14 @@ onUnmounted(() => {
         <div class="progress-fill indeterminate"></div>
       </div>
     </div>
-    <div class="results-grid" v-if="results.length > 0">
+    <div class="filter-wrapper" v-if="results.length > 0">
+      <Filter size="16" class="filter-icon" />
+      <input type="text" v-model="filterText" :placeholder="t('socialForensics.sherlock.filterPlaceholder')" class="filter-input" />
+    </div>
+
+    <div class="results-grid" v-if="filteredResults.length > 0">
       <div
-        v-for="(res, idx) in results"
+        v-for="(res, idx) in filteredResults"
         :key="idx"
         class="result-card"
       >
@@ -372,6 +384,31 @@ onUnmounted(() => {
 }
 
 /* ── Results Grid ─────────────────────────────── */
+/* ── Results Filter ─────────────────────────────── */
+.filter-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  margin-bottom: 16px;
+  border-radius: 4px;
+}
+
+.filter-icon {
+  color: var(--text-muted);
+}
+
+.filter-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  outline: none;
+  font-size: 0.9rem;
+}
+
 .results-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));

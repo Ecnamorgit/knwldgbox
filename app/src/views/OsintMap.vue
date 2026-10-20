@@ -60,14 +60,15 @@ onMounted(async () => {
     maxBoundsViscosity: 1.0
   })
 
-  // Choose tile layer based on light/dark mode
+  // Free, no-API-key basemap (Esri Canvas) that keeps the dark theme.
+  // CartoDB's keyless tiles were retired and now return "API key required".
+  const tileFor = (light) => light
+    ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+    : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+
   const isLight = document.body.classList.contains('light-mode')
-  const tileUrl = isLight
-    ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-    : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-  tiles = L.tileLayer(tileUrl, {
-    subdomains: 'abcd',
-    maxZoom: 19,
+  tiles = L.tileLayer(tileFor(isLight), {
+    maxZoom: 16,
     noWrap: true,
     bounds: [[-90, -180], [90, 180]]
   }).addTo(map)
@@ -75,10 +76,7 @@ onMounted(async () => {
   // Swap tiles when light mode is toggled
   observer = new MutationObserver(() => {
     const lightNow = document.body.classList.contains('light-mode')
-    const newUrl = lightNow
-      ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-    tiles.setUrl(newUrl)
+    tiles.setUrl(tileFor(lightNow))
   })
   observer.observe(document.body, { attributes: true, attributeFilter: ['class'] })
 
@@ -87,7 +85,7 @@ onMounted(async () => {
 
   L.control.zoom({ position: 'bottomright' }).addTo(map)
   L.control.attribution({ position: 'bottomleft', prefix: false })
-    .addAttribution('&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>')
+    .addAttribution('Tiles &copy; <a href="https://www.esri.com/">Esri</a>')
     .addTo(map)
 
   // Custom marker icon

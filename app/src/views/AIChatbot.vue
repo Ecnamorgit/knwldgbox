@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Send, Bot, User, Trash2 } from 'lucide-vue-next'
+import { Send, Bot, User, Trash2, Globe } from 'lucide-vue-next'
 import { marked } from 'marked'
 
 const { t } = useI18n()
@@ -10,45 +10,61 @@ const messages = ref([])
 const userInput = ref('')
 const isGenerating = ref(false)
 const chatContainer = ref(null)
+const webSearch = ref(true)
 
-const selectedModel = ref('openrouter/free')
+const selectedModel = ref('qwen2.5:7b')
 const availableModels = ref([
-  { name: 'OpenRouter Free (Auto-Select)', value: 'openrouter/free' }
+  { name: 'qwen2.5:7b', value: 'qwen2.5:7b' }
 ])
 
 onMounted(async () => {
-  // Try to get configured model from settings
-  const savedSettings = localStorage.getItem('knwldg_api_settings')
-  if (savedSettings) {
-    try {
-      const parsed = JSON.parse(savedSettings)
-      if (parsed.openrouter_model) {
-        selectedModel.value = parsed.openrouter_model
-      }
-    } catch(e) {}
-  }
-  
-  // Load models from OpenRouter
+  // Read AI provider from settings (default: local Ollama)
+  let parsed = {}
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/models')
-    const json = await res.json()
-    if (json && json.data) {
-      const freeModels = json.data.filter(m => m.pricing && m.pricing.prompt === "0" && m.pricing.completion === "0")
-      const dynamicModels = freeModels.map(m => ({
-        name: m.name,
-        value: m.id
-      }))
-      
-      const existingValues = new Set(dynamicModels.map(m => m.value))
-      availableModels.value = [
-        ...dynamicModels.sort((a, b) => a.name.localeCompare(b.name)),
-        ...availableModels.value.filter(m => !existingValues.has(m.value))
-      ]
+    parsed = JSON.parse(localStorage.getItem('knwldg_api_settings') || '{}')
+  } catch(e) {}
+  const provider = parsed.ai_provider || 'local'
+
+  if (provider === 'local' || provider === 'ollama') {
+    // Local Ollama: list installed models via the backend
+    selectedModel.value = parsed.ollama_model || 'qwen2.5:7b'
+    try {
+      const host = window.location.hostname
+      const port = import.meta.env.VITE_API_PORT || 8000
+      const res = await fetch(`http://${host}:${port}/api/ollama/models`)
+      const json = await res.json()
+      if (json && json.status === 'success' && json.models.length) {
+        availableModels.value = json.models.map(m => ({ name: m, value: m }))
+        if (!json.models.includes(selectedModel.value)) {
+          selectedModel.value = json.models[0]
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load Ollama models", e)
     }
-  } catch (e) {
-    console.error("Failed to load models", e)
+  } else {
+    // OpenRouter: load the free model list
+    if (parsed.openrouter_model) selectedModel.value = parsed.openrouter_model
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/models')
+      const json = await res.json()
+      if (json && json.data) {
+        const freeModels = json.data.filter(m => m.pricing && m.pricing.prompt === "0" && m.pricing.completion === "0")
+        const dynamicModels = freeModels.map(m => ({
+          name: m.name,
+          value: m.id
+        }))
+        const existingValues = new Set(dynamicModels.map(m => m.value))
+        availableModels.value = [
+          ...dynamicModels.sort((a, b) => a.name.localeCompare(b.name)),
+          ...availableModels.value.filter(m => !existingValues.has(m.value))
+        ]
+      }
+    } catch (e) {
+      console.error("Failed to load models", e)
+    }
   }
-  
+
   // Load chat history
   const history = localStorage.getItem('knwldg_chat_history')
   if (history) {
@@ -102,9 +118,10 @@ async function sendMessage() {
     const res = await fetch(`http://${window.location.hostname}:${import.meta.env.VITE_API_PORT || 8000}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         messages: apiMessages,
-        model: selectedModel.value
+        model: selectedModel.value,
+        web_search: webSearch.value
       })
     })
     
@@ -112,7 +129,8 @@ async function sendMessage() {
     if (res.ok && data.status === 'success') {
       messages.value.push({
         role: 'assistant',
-        content: data.message.content
+        content: data.message.content,
+        sources: Array.isArray(data.sources) ? data.sources.filter(s => s && s.url) : []
       })
     } else {
       messages.value.push({
@@ -141,6 +159,14 @@ async function sendMessage() {
         <p class="page-subtitle">{{ $t('aiChatbot.subtitle') }}</p>
       </div>
       <div class="header-actions">
+        <button
+          class="icon-btn glass-panel"
+          :class="{ 'search-on': webSearch }"
+          @click="webSearch = !webSearch"
+          :title="webSearch ? 'Recherche web : activée' : 'Recherche web : désactivée'"
+        >
+          <Globe size="18" />
+        </button>
         <select v-model="selectedModel" class="model-select glass-panel">
           <option v-for="model in availableModels" :key="model.value" :value="model.value">
             {{ model.name }}
@@ -167,6 +193,20 @@ async function sendMessage() {
           <div class="message-bubble">
             <div class="message-content markdown-body" v-if="msg.role === 'assistant'" v-html="marked(msg.content)"></div>
             <div class="message-content" v-else>{{ msg.content }}</div>
+            <div class="sources-block" v-if="msg.sources && msg.sources.length">
+              <div class="sources-title">🔗 {{ msg.sources.length }} source{{ msg.sources.length > 1 ? 's' : '' }}</div>
+              <a
+                v-for="(s, i) in msg.sources"
+                :key="i"
+                :href="s.url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="source-link"
+              >
+                <span class="source-num">[{{ i + 1 }}]</span>
+                <span class="source-text">{{ s.title || s.url }}</span>
+              </a>
+            </div>
           </div>
         </div>
         
@@ -257,6 +297,57 @@ async function sendMessage() {
 
 .text-red { color: var(--accent-red); }
 .text-orange { color: var(--accent-orange); }
+
+.icon-btn.search-on {
+  color: var(--accent-orange);
+  border-color: var(--accent-orange);
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.sources-block {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sources-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.source-link {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 2px 0;
+  transition: color 0.15s;
+}
+
+.source-link:hover {
+  color: var(--accent-orange);
+}
+
+.source-num {
+  color: var(--accent-orange);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.source-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .chat-layout {
   flex: 1;
